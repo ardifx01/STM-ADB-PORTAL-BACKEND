@@ -1,0 +1,491 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// 1. Mendefinisikan koneksi database (datasource)
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL") // URL database Anda dari file .env
+}
+
+// 2. Mendefinisikan generator untuk Prisma Client
+generator client {
+  provider = "prisma-client-js"
+}
+
+
+// =============================================================
+// MODUL 1: MANAJEMEN PENGGUNA & AKADEMIK INTI
+// =============================================================
+
+model User {
+  id         BigInt    @id @default(autoincrement())
+  username   String    @unique @db.VarChar(100)
+  password   String    @db.VarChar(255)
+  role       UserRole
+  is_active  Boolean   @default(true)
+  last_login DateTime?
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+
+  // Relasi
+  teacher       Teacher?
+  student       Student?
+  leave_requests LeaveRequest[] @relation("Requestor")
+  verified_leaves LeaveRequest[] @relation("Verifier")
+
+  @@map("users")
+}
+
+model Teacher {
+  id                BigInt    @id @default(autoincrement())
+  user_id           BigInt    @unique
+  nip               String?   @unique @db.VarChar(18)
+  nik               String?   @unique @db.VarChar(16)
+  full_name         String    @db.VarChar(255)
+  phone_number      String?   @db.VarChar(20)
+  employment_status EmploymentStatus
+  signature_image_path String? @db.VarChar(255)
+
+  // Relasi
+  user      User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  
+  homeroom_classes    Class[] @relation("HomeroomTeacher")
+  counselor_classes   Class[] @relation("Counselor")
+  schedules           Schedule[]
+  internship_placements InternshipPlacement[]
+  exam_assignments_s1 ExamAssignment[]    @relation("Supervisor1")
+  exam_assignments_s2 ExamAssignment[]    @relation("Supervisor2")
+  incident_reports    ExamIncidentReport[]
+  attendances         TeacherAttendance[]
+
+  @@map("teachers")
+}
+
+model Subject {
+  id           BigInt   @id @default(autoincrement())
+  subject_code String   @unique @db.VarChar(20)
+  subject_name String   @db.VarChar(255)
+  
+  // Relasi
+  schedules    Schedule[]
+  exam_schedules ExamSchedule[]
+
+  @@map("subjects")
+}
+
+model Class {
+  id                  BigInt   @id @default(autoincrement())
+  class_name          String   @db.VarChar(100)
+  grade_level         Int      // <-- PERBAIKAN DI SINI
+  major               String?  @db.VarChar(100)
+  homeroom_teacher_id BigInt?
+  counselor_id        BigInt?
+
+  // Relasi
+  homeroom_teacher Teacher?   @relation("HomeroomTeacher", fields: [homeroom_teacher_id], references: [id], onDelete: SetNull)
+  counselor        Teacher?   @relation("Counselor", fields: [counselor_id], references: [id], onDelete: SetNull)
+  students         Student[]
+  schedules        Schedule[]
+
+  @@map("classes")
+}
+
+model Student {
+  id               BigInt    @id @default(autoincrement())
+  user_id          BigInt    @unique
+  current_class_id BigInt?
+  nis              String    @unique @db.VarChar(16)
+  nisn             String?   @unique @db.VarChar(10)
+  full_name        String    @db.VarChar(255)
+  gender           Gender
+  address          String?   @db.Text
+  phone_number     String?   @db.VarChar(20)
+  status           StudentStatus @default(AKTIF)
+  rfid_uid         String?   @unique @db.VarChar(100)
+
+  // Relasi
+  user             User                  @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  current_class    Class?                @relation(fields: [current_class_id], references: [id], onDelete: SetNull)
+  attendances      StudentAttendance[]
+  ramadan_activities RamadanActivity[]
+  internship_placements InternshipPlacement[]
+  queue_tickets    QueueTicket[]
+  exam_assignments ExamAssignment[]
+
+  @@map("students")
+}
+
+// =============================================================
+// MODUL 2: JURNAL KBM
+// =============================================================
+
+model Schedule {
+  id          BigInt   @id @default(autoincrement())
+  class_id    BigInt
+  subject_id  BigInt
+  teacher_id  BigInt
+  day_of_week DayOfWeek
+  start_time  DateTime @db.Time()
+  end_time    DateTime @db.Time()
+  room        String?  @db.VarChar(50)
+  
+  // Relasi
+  class           Class             @relation(fields: [class_id], references: [id], onDelete: Cascade)
+  subject         Subject           @relation(fields: [subject_id], references: [id], onDelete: Cascade)
+  teacher         Teacher           @relation(fields: [teacher_id], references: [id], onDelete: Cascade)
+  teaching_journals TeachingJournal[]
+
+  @@map("schedules")
+}
+
+model TeachingJournal {
+  id                       BigInt   @id @default(autoincrement())
+  schedule_id              BigInt
+  teaching_date            DateTime @db.Date
+  topic                    String   @db.Text
+  student_attendance_summary String?  @db.VarChar(255)
+  notes                    String?  @db.Text
+  created_at               DateTime @default(now())
+  
+  // Relasi
+  schedule Schedule @relation(fields: [schedule_id], references: [id], onDelete: Restrict)
+
+  @@map("teaching_journals")
+}
+
+// =============================================================
+// MODUL 3: PKL (PRAKTIK KERJA LAPANGAN)
+// =============================================================
+
+model Company {
+  id           BigInt   @id @default(autoincrement())
+  name         String   @db.VarChar(255)
+  address      String?  @db.Text
+  coordinates  String?  @db.VarChar(100)
+
+  // Relasi
+  internship_placements InternshipPlacement[]
+
+  @@map("companies")
+}
+
+model InternshipPlacement {
+  id                    BigInt    @id @default(autoincrement())
+  student_id            BigInt
+  company_id            BigInt
+  supervisor_teacher_id BigInt?
+  start_date            DateTime  @db.Date
+  end_date              DateTime? @db.Date
+  status                InternshipStatus @default(Aktif)
+
+  // Relasi
+  student             Student              @relation(fields: [student_id], references: [id], onDelete: Cascade)
+  company             Company              @relation(fields: [company_id], references: [id], onDelete: Cascade)
+  supervisor_teacher  Teacher?             @relation(fields: [supervisor_teacher_id], references: [id], onDelete: SetNull)
+  journals            InternshipJournal[]
+
+  @@map("internship_placements")
+}
+
+model InternshipJournal {
+  id                   BigInt     @id @default(autoincrement())
+  placement_id         BigInt
+  activity_date        DateTime   @db.Date
+  activity_description String     @db.Text
+  status               ApprovalStatus @default(Pending)
+  supervisor_notes     String?    @db.Text
+  approved_at          DateTime?
+
+  // Relasi
+  placement InternshipPlacement @relation(fields: [placement_id], references: [id], onDelete: Cascade)
+
+  @@map("internship_journals")
+}
+
+
+// =============================================================
+// MODUL 4: PRESENSI & PERIZINAN
+// =============================================================
+
+model TeacherAttendance {
+  id                   BigInt    @id @default(autoincrement())
+  teacher_id           BigInt
+  timestamp            DateTime
+  status               AttendanceStatus
+  location_coordinates String?   @db.VarChar(100)
+  photo_path           String?   @db.VarChar(255)
+
+  // Relasi
+  teacher Teacher @relation(fields: [teacher_id], references: [id], onDelete: Cascade)
+
+  @@map("teacher_attendances")
+}
+
+model StudentAttendance {
+  id                   BigInt   @id @default(autoincrement())
+  student_id           BigInt
+  timestamp            DateTime
+  status               AttendanceStatus
+  location_coordinates String?  @db.VarChar(100)
+
+  // Relasi
+  student Student @relation(fields: [student_id], references: [id], onDelete: Cascade)
+
+  @@map("student_attendances")
+}
+
+model LeaveRequest {
+  id               BigInt        @id @default(autoincrement())
+  user_id          BigInt
+  request_type     LeaveType
+  start_date       DateTime      @db.Date
+  end_date         DateTime      @db.Date
+  reason           String        @db.Text
+  attachment_path  String?       @db.VarChar(255)
+  status           ApprovalStatus @default(Pending)
+  verifier_id      BigInt?
+  verified_at      DateTime?
+  rejection_reason String?       @db.Text
+  created_at       DateTime      @default(now())
+
+  // Relasi
+  requestor User  @relation("Requestor", fields: [user_id], references: [id], onDelete: Cascade)
+  verifier  User? @relation("Verifier", fields: [verifier_id], references: [id], onDelete: SetNull)
+
+  @@map("leave_requests")
+}
+
+
+// =============================================================
+// MODUL 5: KEGIATAN IBADAH RAMADAN
+// =============================================================
+
+model RamadanActivity {
+  id            BigInt        @id @default(autoincrement())
+  student_id    BigInt
+  activity_date DateTime      @db.Date
+  activity_type RamadanActivityType
+  sub_type      String?       @db.VarChar(50)
+  is_done       Boolean       @default(false)
+  description   String?       @db.Text
+  created_at    DateTime      @default(now())
+
+  // Relasi
+  student Student @relation(fields: [student_id], references: [id], onDelete: Cascade)
+
+  @@unique([student_id, activity_date, activity_type, sub_type], name: "student_activity_date_unique")
+  @@map("ramadan_activities")
+}
+
+
+// =============================================================
+// MODUL 6: MANAJEMEN ANTREAN
+// =============================================================
+
+model QueueCounter {
+  id           Int     @id @default(autoincrement())
+  counter_name String  @db.VarChar(255)
+  counter_code String  @unique @db.VarChar(10)
+  is_active    Boolean @default(true)
+
+  // Relasi
+  tickets QueueTicket[]
+
+  @@map("queue_counters")
+}
+
+model QueueTicket {
+  id            BigInt      @id @default(autoincrement())
+  counter_id    Int
+  student_id    BigInt?
+  ticket_number Int
+  queue_date    DateTime    @db.Date
+  status        QueueStatus @default(Waiting)
+  created_at    DateTime    @default(now())
+  called_at     DateTime?
+  finished_at   DateTime?
+
+  // Relasi
+  counter QueueCounter @relation(fields: [counter_id], references: [id], onDelete: Restrict)
+  student Student?     @relation(fields: [student_id], references: [id], onDelete: SetNull)
+
+  @@unique([queue_date, counter_id, ticket_number], name: "date_counter_ticket_unique")
+  @@map("queue_tickets")
+}
+
+
+// =============================================================
+// MODUL 7: MANAJEMEN UJIAN
+// =============================================================
+
+model Exam {
+  id            BigInt   @id @default(autoincrement())
+  exam_name     String   @db.VarChar(255)
+  start_date    DateTime @db.Date
+  end_date      DateTime @db.Date
+  academic_year String   @db.VarChar(10)
+
+  // Relasi
+  schedules         ExamSchedule[]
+  incident_reports  ExamIncidentReport[]
+
+  @@map("exams")
+}
+
+model ExamSchedule {
+  id         BigInt   @id @default(autoincrement())
+  exam_id    BigInt
+  subject_id BigInt
+  exam_date  DateTime @db.Date
+  start_time DateTime @db.Time()
+  end_time   DateTime @db.Time()
+  session    Int      @default(1) // <-- PERBAIKAN DI SINI
+
+  // Relasi
+  exam       Exam             @relation(fields: [exam_id], references: [id], onDelete: Cascade)
+  subject    Subject          @relation(fields: [subject_id], references: [id], onDelete: Cascade)
+  assignments ExamAssignment[]
+
+  @@map("exam_schedules")
+}
+
+model ExamRoom {
+  id       Int    @id @default(autoincrement())
+  room_name String @unique @db.VarChar(100)
+  capacity Int
+
+  // Relasi
+  assignments      ExamAssignment[]
+  incident_reports ExamIncidentReport[]
+
+  @@map("exam_rooms")
+}
+
+model ExamAssignment {
+  id              BigInt            @id @default(autoincrement())
+  schedule_id     BigInt
+  student_id      BigInt
+  room_id         Int
+  supervisor_1_id BigInt?
+  supervisor_2_id BigInt?
+  token           String?           @unique @db.VarChar(10)
+  student_attendance StudentExamAttendance?
+
+  // Relasi
+  schedule     ExamSchedule @relation(fields: [schedule_id], references: [id], onDelete: Cascade)
+  student      Student      @relation(fields: [student_id], references: [id], onDelete: Cascade)
+  room         ExamRoom     @relation(fields: [room_id], references: [id], onDelete: Restrict)
+  supervisor_1 Teacher?     @relation("Supervisor1", fields: [supervisor_1_id], references: [id], onDelete: SetNull)
+  supervisor_2 Teacher?     @relation("Supervisor2", fields: [supervisor_2_id], references: [id], onDelete: SetNull)
+
+  @@map("exam_assignments")
+}
+
+model ExamIncidentReport {
+  id                      BigInt   @id @default(autoincrement())
+  exam_id                 BigInt
+  room_id                 Int
+  session                 Int      // <-- PERBAIKAN DI SINI
+  report_date             DateTime @db.Date
+  notes                   String?  @db.Text
+  absent_students_summary String?  @db.Text
+  reported_by_id          BigInt
+  created_at              DateTime @default(now())
+
+  // Relasi
+  exam        Exam     @relation(fields: [exam_id], references: [id], onDelete: Cascade)
+  room        ExamRoom @relation(fields: [room_id], references: [id], onDelete: Restrict)
+  reported_by Teacher  @relation(fields: [reported_by_id], references: [id], onDelete: Restrict)
+
+  @@map("exam_incident_reports")
+}
+
+
+// =============================================================
+// DEFINISI TIPE ENUM
+// =============================================================
+
+enum UserRole {
+  admin
+  teacher
+  student
+  staff
+}
+
+enum EmploymentStatus {
+  ASN
+  GTT
+  PTT
+  Tetap
+}
+
+enum Gender {
+  L
+  P
+}
+
+enum StudentStatus {
+  AKTIF
+  LULUS
+  PINDAH
+  DO
+}
+
+enum DayOfWeek {
+  Senin
+  Selasa
+  Rabu
+  Kamis
+  Jumat
+  Sabtu
+  Minggu
+}
+
+enum InternshipStatus {
+  Aktif
+  Selesai
+  Batal
+}
+
+enum ApprovalStatus {
+  Pending
+  Approved
+  Rejected
+}
+
+enum AttendanceStatus {
+  Masuk
+  Pulang
+}
+
+enum LeaveType {
+  Sakit
+  Izin
+  Cuti
+  DinasLuar
+}
+
+enum RamadanActivityType {
+  Puasa
+  SalatFardu
+  SalatTarawih
+  SalatSunnah
+  Tadarus
+  Taklim
+  SalatJumat
+}
+
+enum QueueStatus {
+  Waiting
+  Called
+  Serving
+  Finished
+  Skipped
+}
+
+enum StudentExamAttendance {
+  Hadir
+  Absen
+  Sakit
+  Izin
+}
