@@ -1,5 +1,13 @@
 const express = require('express');
 const authRoutes = require('./auth');
+const userRoutes = require('./users');
+const subjectRoutes = require('./subjects');
+const classRoutes = require('./classes');
+const teacherRoutes = require('./teachers');
+const studentRoutes = require('./students');
+const scheduleRoutes = require('./schedules');
+const attendanceRoutes = require('./attendance');
+const journalRoutes = require('./journals');
 
 const router = express.Router();
 
@@ -39,14 +47,14 @@ router.get('/', (req, res) => {
 
 // Mount routes
 router.use('/auth', authRoutes);
-// router.use('/users', userRoutes);           // TODO: Implement
-// router.use('/teachers', teacherRoutes);     // TODO: Implement
-// router.use('/students', studentRoutes);     // TODO: Implement
-// router.use('/classes', classRoutes);        // TODO: Implement
-// router.use('/subjects', subjectRoutes);     // TODO: Implement
-// router.use('/schedules', scheduleRoutes);   // TODO: Implement
-// router.use('/attendance', attendanceRoutes); // TODO: Implement
-// router.use('/journals', journalRoutes);     // TODO: Implement
+router.use('/users', userRoutes);
+router.use('/subjects', subjectRoutes);
+router.use('/classes', classRoutes);
+router.use('/teachers', teacherRoutes);
+router.use('/students', studentRoutes);
+router.use('/schedules', scheduleRoutes);
+router.use('/attendance', attendanceRoutes);
+router.use('/journals', journalRoutes);
 // router.use('/internships', internshipRoutes); // TODO: Implement
 // router.use('/exams', examRoutes);           // TODO: Implement
 // router.use('/queue', queueRoutes);          // TODO: Implement
